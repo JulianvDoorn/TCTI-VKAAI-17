@@ -23,8 +23,9 @@ set(CMAKE_CXX_FLAGS ${cxxflags})
 
 include_directories(include/)
 
-set(sources
-    src/main.cpp
+file(GLOB sources
+    "include/*.hpp"
+    "src/*.cpp"
 )
 
 add_executable(${PROJECT_NAME} ${sources})

@@ -79,27 +79,27 @@ class DataPoint:
         for other_dp in data:
             neighbors_with_distance.append((self.compute_distance(other_dp), other_dp))
             
-        neighbors_with_distance.sort(key=lambda tuple: tuple[0])
+        neighbors_with_distance.sort(key=lambda tuple: tuple[0], reverse=False)
 
-        return DataPoint.get_dominant_label([tup[1].label for tup in neighbors_with_distance[1:K+1]])
+        return DataPoint.get_dominant_label([tup[1].label for tup in neighbors_with_distance[:K]])
 
     def __repr__(self):
         return str(self.label) + ": " + str(self.v_data)
 
 def main(k):
-    datapoints = DataPoint.from_dataset(dataset.data)
-    validation_datapoints = DataPoint.from_dataset(dataset.validation_data, dataset.labels)
+    datapoints = DataPoint.from_dataset(dataset.data, dataset.labels)
+    validation_datapoints = DataPoint.from_dataset(dataset.validation_data)
 
     estimated_labels: List[DataPoint] = []
 
-    for dp in datapoints:
-        estimated_labels.append(dp.k_nearest_neighbours(k, validation_datapoints))
+    for dp in validation_datapoints:
+        estimated_labels.append(dp.k_nearest_neighbours(k, datapoints))
 
     total_correct = 0
     total_labels = len(estimated_labels)
 
     for i in range(total_labels):
-        if estimated_labels[i] == dataset.labels[i]:
+        if estimated_labels[i] == dataset.validation_labels[i]:
             total_correct += 1
 
     print("for k: " + str(k))
@@ -109,4 +109,5 @@ def main(k):
 
 if __name__ == "__main__":
     print("Starting algo")
-    main(42)
+    for i in range(1, 100):
+        main(i) # best k = 62

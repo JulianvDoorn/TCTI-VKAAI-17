@@ -31,3 +31,5 @@ for label in validation_dates:
     validation_labels.append("herfst")
   else: # from 01-12 to end of year 
     validation_labels.append("winter")
+
+random_days = np.genfromtxt("../data/days.csv", delimiter=";", usecols=[1,2,3,4,5,6,7], converters={5: lambda s: 0 if s == b"-1" else float(s), 7: lambda s: 0 if s == b"-1" else float(s)})

@@ -107,7 +107,12 @@ def main(k):
     print("total labels: " + str(total_labels))
     print("percentage: " + str(total_correct / total_labels * 100))
 
+    estimated_seasons = []
+
+    for dp in DataPoint.from_dataset(dataset.random_days):
+        estimated_seasons.append(dp.k_nearest_neighbours(k, datapoints))
+
+    print(estimated_seasons)
+
 if __name__ == "__main__":
-    print("Starting algo")
-    for i in range(1, 100):
-        main(i) # best k = 62
+    main(62) # best k = 62

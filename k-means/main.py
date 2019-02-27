@@ -11,7 +11,7 @@ import math
 
 ## Typedef for Label, bound with any string-like object
 #
-# @brief Used by DataPoint to label points
+# @details Used by DataPoint to label points
 Label = TypeVar("Label", bound=AnyStr)
 
 class Cluster:
@@ -43,6 +43,9 @@ class Cluster:
         self.centroid_history = [self.centroid]
         self.members = []
 
+    ## Updates the centroid using the assigned member points
+    #
+    # @details
     def update_centroid(self):
         if self.point_count != 0:
             self.centroid = Vector(*(a / self.point_count for a in self.accumulator))
@@ -52,6 +55,7 @@ class Cluster:
         self.members = []
         return (self.centroid_history[-2] - self.centroid).norm()
 
+    ## Appends the provided datapoint to self.members
     def bind_datapoint(self, datapoint):
         self.members.append(datapoint)
 
@@ -60,21 +64,20 @@ class Cluster:
 
 ## Generic DataPoint class 
 #
-# @brief DataPoint is suitable for different machine learning applications. It
-#        has the ability to run kNearestNeighbors algorithms using reference
-#        input data.
+# @details DataPoint is suitable for different machine learning applications. It
+#          has the ability to run the k means algorithms on input data.
 class DataPoint:
     ## Converts a List[T] of any applicable T to a List[DataPoint]
     #
-    # @brief Takes a List[T] dataset and an optional List[Label]. For each index
-    #        i, a datapoint from dataset and a label from labels are bound to
-    #        eachother.
+    # @details Takes a List[T] dataset and an optional List[Label]. For each
+    #          index i, a datapoint from dataset and a label from labels are
+    #          bound to eachother.
     #
-    # @param List[T] dataset to read from
-    # @param Optional[List[Label]] labels to bind with dataset at index i
+    # @param List[T] dataset to read from @param Optional[List[Label]] labels to
+    #        bind with dataset at index i
     @staticmethod
     def from_dataset(dataset: List[T], labels: Optional[List[Label]]=None) -> List['DataPoint']:
-        datapoints: List[DataPoint] = []
+        datapoints: List[DataPoint] = [ ]
 
         if labels is None:
             labels = [None] * len(dataset)
@@ -103,15 +106,28 @@ class DataPoint:
                 counted_labels[l] += 1
 
         return sorted(counted_labels, key=(lambda key: counted_labels[key]), reverse=True)[0]
-        
+
+    ## Finds the lowest and highest value for a given dataset
+    #
+    # @details For every dimension up to n dimensions the limits are calculated
+    #          using List[DataPoint] data. The upper and lower limits are
+    #          returned for every dimension in a List[Tuple[LowerLimit,
+    #          UpperLimit]]
+    #
+    # @param List[DataPoint] data @param int N dimensions available in the given
+    #        List[DataPoint]
+    #
+    # @return List[Tuple[LowerLimit, UpperLimit]] Lower and upper limits for
+    #         every dimension. Each list element represents the limits for a
+    #         dimensions respectively.
     @staticmethod
-    def calculate_limits( data: List['DataPoint'], dimensions: int) -> List[Tuple[int, int]]:
+    def calculate_limits(data: List['DataPoint'], dimensions: int) -> List[Tuple[int, int]]:
         limits: List[Optional[Tuple[int, int]]] = [None] * dimensions
 
         for dp in data:
             for i in range(dimensions):
-                # find lowest and highest value in all datapoints for every
-                # dimension
+                # Find lowest and highest value in all datapoints for every
+                # dimension.
                 if limits[i] is None:
                     limits[i] = (dp.v_data[i], dp.v_data[i])
                 else:
@@ -122,14 +138,34 @@ class DataPoint:
 
         return limits
 
+    ## Computes and returns the clusters containing references to the associated member datapoints
+    #
+    # @details Computes k clusters for List[DataPoint] data for N dimensions.
+    #          The computation continues until the cumulative displacement of
+    #          the clusters' centroids is less or equal than
+    #          max_allowed_displacement.
+    #
+    # @param K clusters to find @param List[DataPoint] dataset to use
+    # @param int "dimensions" (kwarg) amount of dimensions in dataset
+    # @param float "max_allowed_displacement" (kwarg) continue iterations until
+    #        max_allowed_displacement is achieved
     @staticmethod
-    def k_means(K: int, data: List['DataPoint'], dimensions: int) -> Label:
+    def k_means(K: int, data: List['DataPoint'], **kwargs) -> Label:
+        assert "dimensions" in kwargs.keys(), "Kwarg dimension missing"
+
+        dimensions = kwargs["dimensions"]
+        max_allowed_displacement = kwargs["max_allowed_displacement"] if "max_allowed_displacement" in kwargs.keys() else 0.1
+
         ready = False
         while not ready:
-            clusters: List[Cluster] = [Cluster(dimensions, random_choice=data) for _ in range(K)]
+            if "random_choice" in kwargs.keys():
+                clusters: List[Cluster] = [Cluster(dimensions, random_choice=kwargs["random_choice"]) for _ in range(K)]
+            elif "limits" in kwargs.keys():
+                clusters: List[Cluster] = [Cluster(dimensions, limits=kwargs["limits"]) for _ in range(K)]
+
             cumulative_displacement: int = None
 
-            while cumulative_displacement is None or cumulative_displacement > 0.1:
+            while cumulative_displacement is None or cumulative_displacement > max_allowed_displacement:
                 cumulative_displacement = 0
                 for c in clusters:
                     cumulative_displacement += c.update_centroid()
@@ -152,7 +188,6 @@ class DataPoint:
     def __init__(self, label: Label, v_data: Vector):
         self.label: Label = label
         self.v_data: Vector = v_data
-        # self.cluster: Cluster = None
 
     ## Computes the euclidian distance between self and another datapoint
     #
@@ -163,6 +198,9 @@ class DataPoint:
         elif isinstance(other, Cluster):
             return (self.v_data - other.centroid).norm()
 
+    ## Adds a reference to the members list of the closest cluster of List[Clusters] to 'self'
+    #
+    # @param List[Cluster] clusters to compare with
     def bind_to_closest_cluster(self, clusters: List[Cluster]):
         closest_cluster: Cluster = clusters[0]
 
@@ -170,44 +208,24 @@ class DataPoint:
             if self.compute_distance(c) < self.compute_distance(closest_cluster):
                 closest_cluster = c
 
-        # self.cluster = closest_cluster
         closest_cluster.bind_datapoint(self)
         closest_cluster.accumulator += self.v_data
         closest_cluster.point_count += 1
 
-    ## Computes the most plausible label for self using k nearest neighbours
-    #
-    # @param int K amount of nearest neighbours to use as reference
-    # @param List[DataPoint] reference data to compute nearest neighbours of
-    def k_nearest_neighbours(self, K: int, data: List['DataPoint']) -> Label:
-        neighbors_with_distance = []
-
-        for other_dp in data:
-            neighbors_with_distance.append((self.compute_distance(other_dp), other_dp))
-            
-        neighbors_with_distance.sort(key=lambda tuple: tuple[0], reverse=False)
-
-        return DataPoint.get_dominant_label([tup[1].label for tup in neighbors_with_distance[:K]])
-
     def __repr__(self):
         return str(self.label) + ": " + str(self.v_data)
 
-def main(k, datapoints):
-    clusters = DataPoint.k_means(K, datapoints, 7)
-
-    clusters_dict = { }
+## Computes the cumulative distance of every datapoint to their corresponding cluster's centroid
+#
+# @param int K clusters
+# @param List[DataPoint] datapoints to compute with
+def compute_cum_distance(k: int, datapoints: List[DataPoint]):
+    clusters = DataPoint.k_means(K, datapoints, dimensions=7, random_choice=datapoints)
     cum_distance = 0
 
     for c in clusters:
         for dp in c.members:
             cum_distance += ((dp.v_data - c.centroid) ** Vector(2, 2)).norm()
-
-            if c not in clusters_dict.keys():
-                clusters_dict[c] = 1
-            else:
-                clusters_dict[c] += 1
-
-    # print("For K ", k, " clusters: ", clusters_dict)
 
     return cum_distance
 
@@ -229,9 +247,8 @@ if __name__ == "__main__":
 
         promises[K] = []
 
-        for i in range(50):
-            # print("Spawning thread: {}".format(spawned_threads + 1))
-            promises[K].append(pool.apply_async(main, (K, datapoints)))
+        for i in range(100):
+            promises[K].append(pool.apply_async(compute_cum_distance, (K, datapoints)))
             spawned_threads += 1
 
     print("Running...")
@@ -256,8 +273,7 @@ if __name__ == "__main__":
 
     for K in range(1, len(deriv)-1):
         if deriv[K] < deriv[K+1]:
-            print("It is", K+1)
+            print("Found optimal K:", K+1)
             break
-
 
     plt.show()

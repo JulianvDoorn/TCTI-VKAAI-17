@@ -3,11 +3,11 @@
 import numpy as np
 import random
 import dataset
+import matplotlib.pyplot as plt
+
 from vector import Vector
 from typing import List, Optional, TypeVar, AnyStr, T, Tuple, Dict
 from multiprocessing.pool import ThreadPool, ApplyResult
-import matplotlib.pyplot as plt
-import math
 
 ## Typedef for Label, bound with any string-like object
 #

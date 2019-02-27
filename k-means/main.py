@@ -171,7 +171,7 @@ def main(k, datapoints):
     cum_distance = 0
 
     for dp in datapoints:
-        cum_distance += ((dp.v_data - dp.cluster.centroid) ** (2, 2)).norm()
+        cum_distance += ((dp.v_data - dp.cluster.centroid) ** Vector(2, 2)).norm()
 
         if dp.cluster not in clusters_dict.keys():
             clusters_dict[dp.cluster] = 1

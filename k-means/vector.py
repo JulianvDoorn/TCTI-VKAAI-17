@@ -122,6 +122,11 @@ class Vector(object):
         """ Returns the vector difference of self and other """
         subbed = tuple( a - b for a, b in zip(self, other) )
         return Vector(*subbed)
+
+    def __pow__(self, other):
+        """ Returns the power of self and other """
+        powwed = tuple( a ** b for a, b in zip(self, other) )
+        return Vector(*powwed)
     
     def __iter__(self):
         return self.values.__iter__()

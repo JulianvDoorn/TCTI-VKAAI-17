@@ -7,7 +7,7 @@ from vector import Vector
 from typing import List, Optional, TypeVar, AnyStr, T, Tuple, Dict
 from multiprocessing.pool import ThreadPool, ApplyResult
 import matplotlib.pyplot as plt
-import copy
+import math
 
 ## Typedef for Label, bound with any string-like object
 #
@@ -18,16 +18,30 @@ class Cluster:
     last_cluster_id: int = 0
 
     @staticmethod
+    def pick_random_point(points: List['DataPoint']):
+        return random.choice(points)
+
+    @staticmethod
     def generate_random_vector(dimensions, limits):
         return Vector(*[random.uniform(*(limits[i])) for i in range(dimensions)])
 
-    def __init__(self, dimensions, limits):
+    def __init__(self, dimensions, **kwargs):
         self.id = Cluster.last_cluster_id + 1
         Cluster.last_cluster_id += 1
-        self.centroid = Cluster.generate_random_vector(dimensions, limits)
+
+        if "limits" in kwargs.keys() and "random_choice" in kwargs.keys():
+            raise Exception("Limits kwarg cannot be used simultaneously with random_choice")
+        elif "limits" in kwargs.keys():
+            self.centroid = Cluster.generate_random_vector(dimensions, kwargs["limits"])
+        elif "random_choice" in kwargs.keys():
+            self.centroid = Cluster.pick_random_point(kwargs["random_choice"]).v_data
+        else:
+            raise Exception("Kwarg missing: limits or random_choice")
+
         self.accumulator: Vector = Vector(*([0] * dimensions))
         self.point_count = 0
         self.centroid_history = [self.centroid]
+        self.members = []
 
     def update_centroid(self):
         if self.point_count != 0:
@@ -35,7 +49,11 @@ class Cluster:
         self.accumulator = Vector(*([0] * len(self.accumulator.values)))
         self.point_count = 0
         self.centroid_history.append(self.centroid)
+        self.members = []
         return (self.centroid_history[-2] - self.centroid).norm()
+
+    def bind_datapoint(self, datapoint):
+        self.members.append(datapoint)
 
     def __repr__(self):
         return "Cluster " + str(self.id)
@@ -106,17 +124,26 @@ class DataPoint:
 
     @staticmethod
     def k_means(K: int, data: List['DataPoint'], dimensions: int) -> Label:
-        limits = DataPoint.calculate_limits(data, dimensions)
+        ready = False
+        while not ready:
+            clusters: List[Cluster] = [Cluster(dimensions, random_choice=data) for _ in range(K)]
+            cumulative_displacement: int = None
 
-        clusters: List[Cluster] = [Cluster(dimensions, limits) for _ in range(K)]
-        cumulative_displacement: int = None
+            while cumulative_displacement is None or cumulative_displacement > 0.1:
+                cumulative_displacement = 0
+                for c in clusters:
+                    cumulative_displacement += c.update_centroid()
+                for dp in data:
+                    dp.bind_to_closest_cluster(clusters)
 
-        while cumulative_displacement is None or cumulative_displacement > 1:
-            cumulative_displacement = 0
-            for dp in data:
-                dp.bind_to_closest_cluster(clusters)
+            # If every cluster has members, the clustering is done properly
+            # otherwise the algorithmn runs again.
+            ready = True
             for c in clusters:
-                cumulative_displacement += c.update_centroid()
+                if len(c.members) == 0:
+                    ready = False
+
+        return clusters
 
     ## Constructs a new class of DataPoint with a label and vector data
     #
@@ -125,7 +152,7 @@ class DataPoint:
     def __init__(self, label: Label, v_data: Vector):
         self.label: Label = label
         self.v_data: Vector = v_data
-        self.cluster: Cluster = None
+        # self.cluster: Cluster = None
 
     ## Computes the euclidian distance between self and another datapoint
     #
@@ -143,7 +170,8 @@ class DataPoint:
             if self.compute_distance(c) < self.compute_distance(closest_cluster):
                 closest_cluster = c
 
-        self.cluster = closest_cluster
+        # self.cluster = closest_cluster
+        closest_cluster.bind_datapoint(self)
         closest_cluster.accumulator += self.v_data
         closest_cluster.point_count += 1
 
@@ -165,22 +193,23 @@ class DataPoint:
         return str(self.label) + ": " + str(self.v_data)
 
 def main(k, datapoints):
-    DataPoint.k_means(K, datapoints, 7)
+    clusters = DataPoint.k_means(K, datapoints, 7)
 
     clusters_dict = { }
     cum_distance = 0
 
-    for dp in datapoints:
-        cum_distance += ((dp.v_data - dp.cluster.centroid) ** Vector(2, 2)).norm()
+    for c in clusters:
+        for dp in c.members:
+            cum_distance += ((dp.v_data - c.centroid) ** Vector(2, 2)).norm()
 
-        if dp.cluster not in clusters_dict.keys():
-            clusters_dict[dp.cluster] = 1
-        else:
-            clusters_dict[dp.cluster] += 1
+            if c not in clusters_dict.keys():
+                clusters_dict[c] = 1
+            else:
+                clusters_dict[c] += 1
 
-    print(clusters_dict)
+    # print("For K ", k, " clusters: ", clusters_dict)
 
-    return cum_distance, clusters_dict
+    return cum_distance
 
 if __name__ == "__main__":
     xdat: List[int] = [ ]
@@ -190,23 +219,45 @@ if __name__ == "__main__":
     promises: Dict[int, List[ApplyResult]] = { }
     datapoints = DataPoint.from_dataset(dataset.data, dataset.labels)
 
+    spawned_threads = 0
+    threads_finished = 0
+
+    print("Spawning threads...")
+
     for K in range(1, 10):
         xdat.append(K)
 
         promises[K] = []
 
-        for i in range(10):
-            promises[K].append(pool.apply_async(main, (K, copy.deepcopy(datapoints))))
+        for i in range(50):
+            # print("Spawning thread: {}".format(spawned_threads + 1))
+            promises[K].append(pool.apply_async(main, (K, datapoints)))
+            spawned_threads += 1
+
+    print("Running...")
 
     for K, l in promises.items():
+        print("Waiting for threads: {}/{}".format(threads_finished, spawned_threads))
         cum_measurements: float = 0.0
 
         for p in l:
-            cum_measurements, clusters_dict = p.get()
+            cum_measurements += p.get()
+            threads_finished += 1
 
         ydat.append(cum_measurements / len(l))
-
+        
     plt.plot(np.array(xdat), np.array(ydat))
     plt.ylabel("Average distance")
     plt.xlabel("K")
+
+    # derivative
+    deriv = np.diff(np.array(ydat), n=2)
+    plt.plot(np.array(xdat[:7]), deriv, color="green")
+
+    for K in range(1, len(deriv)-1):
+        if deriv[K] < deriv[K+1]:
+            print("It is", K+1)
+            break
+
+
     plt.show()

@@ -247,7 +247,7 @@ if __name__ == "__main__":
 
         promises[K] = []
 
-        for i in range(100):
+        for i in range(1000):
             promises[K].append(pool.apply_async(compute_cum_distance, (K, datapoints)))
             spawned_threads += 1
 

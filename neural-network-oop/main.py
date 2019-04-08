@@ -2,7 +2,9 @@ import random
 from numpy import tanh
 from typing import List, Tuple, Dict
 
-## Output or hidden neuron
+# Output or hidden neuron
+
+
 class Neuron:
     @staticmethod
     def get_initial_weight():
@@ -17,8 +19,10 @@ class Neuron:
         self.backward_bound: Dict['Neuron', 'Weight'] = {}
         self.stored_activation = None
         self.stored_error = None
+
         def error_g(x):
             raise Exception("Error, no g and der_g function is set")
+
         self.g = error_g
         self.der_g = error_g
 
@@ -55,7 +59,7 @@ class Neuron:
     def get_error(self):
         if self.stored_error is None:
             self.stored_error = self.der_g(self.get_input()) * sum([
-               n.get_weight_to_neuron(self) * n.get_error() for n in self.forward_bound
+                n.get_weight_to_neuron(self) * n.get_error() for n in self.forward_bound
             ])
 
         return self.stored_error
@@ -63,7 +67,9 @@ class Neuron:
     def __repr__(self):
         return "Neuron " + str(self.index)
 
-## Input neuron
+# Input neuron
+
+
 class InputNeuron(Neuron):
     def __init__(self):
         super(InputNeuron, self).__init__()
@@ -86,6 +92,7 @@ class InputNeuron(Neuron):
         # Input neurons cannot have an error
         return 0
 
+
 class OutputNeuron(Neuron):
     def __init__(self):
         super(OutputNeuron, self).__init__()
@@ -93,20 +100,23 @@ class OutputNeuron(Neuron):
 
     def get_error(self):
         if self.stored_error is None:
-            self.stored_error = self.der_g(self.get_input()) * (self.desired_output - self.get_activation())
+            self.stored_error = self.der_g(
+                self.get_input()) * (self.desired_output - self.get_activation())
 
         return self.stored_error
 
     def set_desired(self, d):
         self.desired_output = d
 
-## Bias neuron
+# Bias neuron
+
+
 class BiasNeuron(InputNeuron):
     def __init__(self):
         super(BiasNeuron, self).__init__()
         self.input = -1
 
-    ## Do nothing in order to maintain self.input == -1
+    # Do nothing in order to maintain self.input == -1
     def set_input(self, v):
         pass
 
@@ -191,7 +201,7 @@ class Network:
                         Neuron.get_initial_weight()
                     )
                     prev_n.forward_bind(n)
-                    
+
     def set_g(self, g, der_g):
         for l in self.layers:
             l.set_g(g, der_g)
@@ -242,12 +252,11 @@ class Network:
                     for n in l:
                         for prev_n, w in n.backward_bound.items():
                             # print("Processing:", prev_n, "->", n)
-                            n.backward_bound[prev_n] = w + stepsize * prev_n.get_activation() * n.get_error()
+                            n.backward_bound[prev_n] = w + stepsize * \
+                                prev_n.get_activation() * n.get_error()
 
                 # Repeat until all neurons have been backpropagated
                 # print("Error per neuron:", error_per_neuron)
-
-
 
 
 def read_input():

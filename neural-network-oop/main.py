@@ -10,10 +10,9 @@ class Neuron:
 
     index_cnt = 0
 
-    def __init__(self, override_weight=None):
+    def __init__(self):
         Neuron.index_cnt += 1
         self.index = Neuron.index_cnt
-        self.override_weight = override_weight
         self.forward_bound: List['Neuron'] = []
         self.backward_bound: Dict['Neuron', 'Weight'] = {}
         self.stored_activation = None
@@ -43,19 +42,19 @@ class Neuron:
         self.stored_error = None
 
     def get_input(self):
-        return [n.get_activation() * w for n, w in self.backward_bound.items()]
+        return sum([
+            n.get_activation() * w for n, w in self.backward_bound.items()
+        ])
 
     def get_activation(self):
         if self.stored_activation is None:
-            self.stored_activation = self.g(
-                sum(self.get_input())
-            )
+            self.stored_activation = self.g(self.get_input())
 
         return self.stored_activation
 
     def get_error(self):
         if self.stored_error is None:
-            self.stored_error = self.der_g(sum(self.get_input())) * sum([
+            self.stored_error = self.der_g(self.get_input()) * sum([
                n.get_weight_to_neuron(self) * n.get_error() for n in self.forward_bound
             ])
 
@@ -66,12 +65,12 @@ class Neuron:
 
 ## Input neuron
 class InputNeuron(Neuron):
-    def __init__(self, override_weight=None):
-        super(InputNeuron, self).__init__(override_weight)
+    def __init__(self):
+        super(InputNeuron, self).__init__()
         self.input = None
 
     def get_input(self):
-        return [self.input]
+        return self.input
 
     def get_activation(self):
         return self.input
@@ -88,13 +87,13 @@ class InputNeuron(Neuron):
         return 0
 
 class OutputNeuron(Neuron):
-    def __init__(self, override_weight=None):
-        super(OutputNeuron, self).__init__(override_weight)
+    def __init__(self):
+        super(OutputNeuron, self).__init__()
         self.desired_output = None
 
     def get_error(self):
         if self.stored_error is None:
-            self.stored_error = self.der_g(sum(self.get_input())) * (self.desired_output - self.get_activation())
+            self.stored_error = self.der_g(self.get_input()) * (self.desired_output - self.get_activation())
 
         return self.stored_error
 
@@ -103,8 +102,8 @@ class OutputNeuron(Neuron):
 
 ## Bias neuron
 class BiasNeuron(InputNeuron):
-    def __init__(self, override_weight=None):
-        super(BiasNeuron, self).__init__(override_weight)
+    def __init__(self):
+        super(BiasNeuron, self).__init__()
         self.input = -1
 
     ## Do nothing in order to maintain self.input == -1
@@ -123,12 +122,6 @@ class Layer:
     def reset(self):
         for n in self.neurons:
             n.reset()
-
-    def add_bias(self, bias):
-        for n in self.neurons:
-            n.backward_bind(
-                bias, n.override_weight if n.override_weight is not None else Neuron.get_initial_weight())
-        return bias
 
     def set_g(self, g, der_g):
         for n in self.neurons:
@@ -195,7 +188,6 @@ class Network:
                 for n in l:
                     n.backward_bind(
                         prev_n,
-                        n.override_weight if n.override_weight is not None else
                         Neuron.get_initial_weight()
                     )
                     prev_n.forward_bind(n)
@@ -208,12 +200,14 @@ class Network:
         self.input_layer.input(input_vector)
 
     def output(self):
-        tmp = self.output_layer.output()
-
         for l in self.layers:
             l.reset()
-
+        tmp = self.output_layer.output()
         return tmp
+
+    def calc(self, *args):
+        self.input((args))
+        return self.output()
 
     # First propagate forward
     # then porpagate backward, calculate error per neuron.
@@ -247,6 +241,7 @@ class Network:
                 for l in self.layers[1:]:
                     for n in l:
                         for prev_n, w in n.backward_bound.items():
+                            # print("Processing:", prev_n, "->", n)
                             n.backward_bound[prev_n] = w + stepsize * prev_n.get_activation() * n.get_error()
 
                 # Repeat until all neurons have been backpropagated
@@ -275,46 +270,57 @@ def main():
 
     n1 = l1.add_neuron(InputNeuron())
     n2 = l1.add_neuron(InputNeuron())
-    n3 = l2.add_neuron(Neuron())
-    n4 = l2.add_neuron(Neuron())
+    n3 = l1.add_neuron(InputNeuron())
+    n4 = l1.add_neuron(InputNeuron())
+    b1 = l1.add_neuron(BiasNeuron())
     n5 = l2.add_neuron(Neuron())
     n6 = l2.add_neuron(Neuron())
     n7 = l2.add_neuron(Neuron())
-    b1 = l2.add_bias(BiasNeuron(0))
-    n8 = l3.add_neuron(OutputNeuron())
-    n9 = l3.add_neuron(OutputNeuron())
-    b2 = l3.add_bias(BiasNeuron(0))
+    n8 = l2.add_neuron(Neuron())
+    n9 = l2.add_neuron(Neuron())
+    b2 = l2.add_neuron(BiasNeuron())
+    n10 = l3.add_neuron(OutputNeuron())
+    n11 = l3.add_neuron(OutputNeuron())
+    n12 = l3.add_neuron(OutputNeuron())
 
     nn.bind_axons()
 
     data = read_input()
 
+    # Tanh
     nn.set_g(lambda x: tanh(x), lambda x: 1 - tanh(x)**2)
+    # ReLU
+    # nn.set_g(lambda x: x if x >= 0 else 0, lambda x: 1 if x >= 0 else 0)
 
     nn.train(
         # Training data in format of:
         # <input>: <expected-output>
         training_data={
-            (0, 0): (0, 0),
-            (0, 1): (0, 1),
-            (1, 0): (1, 0),
-            (1, 1): (1, 1),
+            (0, 0, 0, 0): (0, 0, 0),
+            (0, 0, 0, 1): (0, 0, 1),
+            (0, 0, 1, 0): (0, 1, 0),
+            (0, 0, 1, 1): (0, 1, 1),
+            (0, 1, 0, 0): (0, 0, 1),
+            (0, 1, 0, 1): (0, 1, 0),
+            (0, 1, 1, 0): (0, 1, 1),
+            (0, 1, 1, 1): (1, 0, 0),
+            (1, 0, 0, 0): (0, 1, 0),
+            (1, 0, 0, 1): (0, 1, 1),
+            (1, 0, 1, 0): (1, 0, 0),
+            (1, 0, 1, 1): (1, 0, 1),
+            (1, 1, 0, 0): (0, 1, 1),
+            (1, 1, 0, 1): (1, 0, 0),
+            (1, 1, 1, 0): (1, 0, 1),
+            (1, 1, 1, 1): (1, 1, 0),
         },
         iterations=10000,
         stepsize=0.01
     )
 
-    nn.input((0, 0))
-    print(nn.output()) # Expects (0, 0)
-
-    nn.input((0, 1))
-    print(nn.output()) # Expects (0, 1)
-
-    nn.input((1, 0))
-    print(nn.output()) # Expects (1, 0)
-
-    nn.input((1, 1))
-    print(nn.output()) # Expects (1, 1)
+    print(nn.calc(0, 0, 1, 0))
+    print(nn.calc(0, 1, 1, 1))
+    print(nn.calc(1, 0, 0, 1))
+    print(nn.calc(1, 1, 1, 0))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import random
 from numpy import tanh
 from typing import List, Tuple, Dict
+import csv
 
 # Output or hidden neuron
 
@@ -259,23 +260,60 @@ class Network:
                 # print("Error per neuron:", error_per_neuron)
 
 
-def read_input():
-    irisdtata = []
-    inputdata = open("../data/iris.data", "r")
-    for line in inputdata:
-        if len(line) > 1:
-            split = line.split(",")
-            split[4] = split[4].strip()
-            irisdtata.append(split)
-    return irisdtata
+def read_input(file):
+    labels = []
+    csv_data = []
 
+    with open(file, 'r') as csvfile:
+        reader = csv.reader(csvfile, delimiter=',')
+
+        for r in reader:
+            if r:
+                if r[4] not in labels:
+                    labels.append(r[4])
+                r[4] = labels.index(r[4])
+                csv_data.append([float(f) for f in r[0:4]] + [r[4]])
+
+    return csv_data, labels
+
+def expected_output_for_row(row):
+    if row[4] == 0:
+        return (1, 0, 0)
+    if row[4] == 1:
+        return (0, 1, 0)
+    if row[4] == 2:
+        return (0, 0, 1)
+
+def get_label_from_output(val, labels):
+    if val == (1, 0, 0):
+        return labels[0]
+    if val == (0, 1, 0):
+        return labels[1]
+    if val == (0, 0, 1):
+        return labels[2]
+
+def generate_training_data(rows):
+    training_data = {}
+
+    for r in rows:
+        training_data[(*r[0:4],)] = expected_output_for_row(r)
+
+    return training_data
 
 def main():
+    csv, labels = read_input('./iris.data.txt')
+    validation_csv, validation_labels = read_input('./iris.data.validation.txt')
+
+    assert labels == validation_labels, 'Labels and validation_labels do not match!'
+
+    training_data = generate_training_data(csv)
+
     nn = Network()
 
     l1 = nn.append_layer(InputLayer())
     l2 = nn.append_layer(Layer())
-    l3 = nn.append_layer(OutputLayer())
+    l3 = nn.append_layer(Layer())
+    l4 = nn.append_layer(OutputLayer())
 
     n1 = l1.add_neuron(InputNeuron())
     n2 = l1.add_neuron(InputNeuron())
@@ -287,14 +325,18 @@ def main():
     n7 = l2.add_neuron(Neuron())
     n8 = l2.add_neuron(Neuron())
     n9 = l2.add_neuron(Neuron())
-    b2 = l2.add_neuron(BiasNeuron())
-    n10 = l3.add_neuron(OutputNeuron())
-    n11 = l3.add_neuron(OutputNeuron())
-    n12 = l3.add_neuron(OutputNeuron())
+    b1 = l2.add_neuron(BiasNeuron())
+    n10 = l3.add_neuron(Neuron())
+    n11 = l3.add_neuron(Neuron())
+    n12 = l3.add_neuron(Neuron())
+    n13 = l3.add_neuron(Neuron())
+    n14 = l3.add_neuron(Neuron())
+    b2 = l3.add_neuron(BiasNeuron())
+    n15 = l4.add_neuron(OutputNeuron())
+    n16 = l4.add_neuron(OutputNeuron())
+    n17 = l4.add_neuron(OutputNeuron())
 
     nn.bind_axons()
-
-    data = read_input()
 
     # Tanh
     nn.set_g(lambda x: tanh(x), lambda x: 1 - tanh(x)**2)
@@ -304,33 +346,19 @@ def main():
     nn.train(
         # Training data in format of:
         # <input>: <expected-output>
-        training_data={
-            (0, 0, 0, 0): (0, 0, 0),
-            (0, 0, 0, 1): (0, 0, 1),
-            (0, 0, 1, 0): (0, 1, 0),
-            (0, 0, 1, 1): (0, 1, 1),
-            (0, 1, 0, 0): (0, 0, 1),
-            (0, 1, 0, 1): (0, 1, 0),
-            (0, 1, 1, 0): (0, 1, 1),
-            (0, 1, 1, 1): (1, 0, 0),
-            (1, 0, 0, 0): (0, 1, 0),
-            (1, 0, 0, 1): (0, 1, 1),
-            (1, 0, 1, 0): (1, 0, 0),
-            (1, 0, 1, 1): (1, 0, 1),
-            (1, 1, 0, 0): (0, 1, 1),
-            (1, 1, 0, 1): (1, 0, 0),
-            (1, 1, 1, 0): (1, 0, 1),
-            (1, 1, 1, 1): (1, 1, 0),
-        },
+        training_data=training_data,
         iterations=10000,
-        stepsize=0.01
+        stepsize=0.1
     )
 
-    print(nn.calc(0, 0, 1, 0))
-    print(nn.calc(0, 1, 1, 1))
-    print(nn.calc(1, 0, 0, 1))
-    print(nn.calc(1, 1, 1, 0))
+    for r in validation_csv:
+        expect = expected_output_for_row(r)
+        winner = max(expect)
+        print('Expected:', expect, '(' + str(labels[expect.index(winner)]) + ')')
 
+        ret = nn.calc(*r[0:4])
+        winner = max(ret)
+        print('Got:', '(%.2f, %.2f, %.2f)' % ret, '(' + str(labels[ret.index(winner)]) + ')')
 
 if __name__ == "__main__":
     main()

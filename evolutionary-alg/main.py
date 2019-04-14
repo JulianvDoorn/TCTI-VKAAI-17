@@ -171,7 +171,6 @@ class EvolutionaryOperators:
     @staticmethod
     def complementary_flip(v, min, max):
         n = max - min
-        half_range = ceil(n / 2)
         scoped_v = EvolutionaryOperators.scoped_mod(v, min, max)
         return n - scoped_v + min
 

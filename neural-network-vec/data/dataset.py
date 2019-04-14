@@ -50,7 +50,7 @@ def save_mnist(save_path="./"):
     for name in filename[-2:]:
         with gzip.open(save_path+name[1], 'rb') as f:
             mnist[name[0]] = np.frombuffer(f.read(), np.uint8, offset=8)
-    with open("mnist.pkl", 'wb') as f:
+    with open(save_path+"mnist.pkl", 'wb') as f:
         pickle.dump(mnist,f)
     print("Save complete.")
 

@@ -69,7 +69,7 @@ class Genotype:
         # the fitness because 1 does not contribute to the fitness for the
         # product component.
         tmp_product = self.product[:]
-        if 1 in self.product:
+        if 1 in tmp_product:
             tmp_product.remove(1) 
 
         prod_fitness = abs(sum([log(prod(self.product)/target_prod, v) for v in tmp_product]))

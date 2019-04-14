@@ -97,6 +97,9 @@ class Genotype:
 
         return (*lst,)
 
+    def get_value(self):
+        return (sum(self.sum), prod(self.product))
+
     ## Fitness function
     #
     # @details Fitness is calculated as (LaTeX formula):
@@ -137,7 +140,14 @@ class Genotype:
 
         prod_fitness = abs(sum([log(prod(self.product)/target_prod, v) for v in tmp_product]))
 
-        return sum_fitness + prod_fitness
+        return (sum_fitness + prod_fitness)**2
+
+    def create_child(self, partner):
+        _self = self.to_vector()
+        partner = partner.to_vector()
+        half = int(len(_self) / 2)
+        child = _self[:half] + partner[half:]
+        return Genotype.from_vector(child)
 
     def __repr__(self):
         return "Sum fragment: %s Product fragment: %s" % (str(self.sum), str(self.product))
@@ -207,36 +217,60 @@ class EvolutionaryOperators:
 
         return f
 
-def create_offspring(mother: Genotype = None, father: Genotype = None, children: int = 1, **kwargs) -> Generation:
-    assert "operators" in kwargs.keys(), "kwarg operators not defined"
-    operators = kwargs["operators"]
 
-    offspring: List[Genotype] = []
+def evolve(population, retain=0.2, random_select=0.05, mutate=0.01):
+    graded = [(G.fitness(), G) for G in population]
+    graded = [t[1] for t in sorted(graded, key=lambda t: t[0])]
+    retain_length = int(len(graded) * retain)
+    parents = graded[:retain_length]
 
-    for op in operators:
-        child = deepcopy(mother)
-        op(offspring, mother, father)
-        offspring.append(child)
+    # Promote genetic diversity
+    for G in graded[retain_length:]:
+        if random_select > random.random():
+            parents.append(G)
 
-    return Generation(offspring)
+    desired_length = len(population) - len(parents)
+    children = []
+    while len(children) < desired_length:
+        # With respect to gender diversity, no male and female terms are used
+        partner1 = random.choice(parents)
+        partner2 = random.choice(parents)
+        if partner1 != partner2:
+            children.append(partner1.create_child(partner2))
 
+    for i, G in enumerate(children):
+        if mutate > random.random():
+            swap_mutate = EvolutionaryOperators.swap(GenotypeBit.Sum, GenotypeBit.Product)
+            children[i] = swap_mutate(G)
+
+    parents.extend(children)
+    return parents
+
+def grade_population(population, top_percentage=0.1):
+    fraction = ceil(top_percentage*len(population))
+    return sum([G.fitness() for G in population[:fraction]]) / (fraction - 1)
 
 if __name__ == "__main__":
-    genotype = Genotype.from_vector((
-        GenotypeBit.Sum,
-        GenotypeBit.Product,
-        GenotypeBit.Sum,
-        GenotypeBit.Product,
-        GenotypeBit.Sum,
-        GenotypeBit.Product,
-        GenotypeBit.Sum,
-        GenotypeBit.Product,
-        GenotypeBit.Sum,
-        GenotypeBit.Product,
-    ))
+    population = [Genotype() for _ in range(0, 1000)]
+    fitness_history = [grade_population(population)]
 
-    f = EvolutionaryOperators.swap(GenotypeBit.Sum, GenotypeBit.Product)
+    for _ in range(1000):
+        population = evolve(population)
+        score = grade_population(population)
+        fitness_history.append(score)
 
-    while True:
-        print(genotype)
-        genotype = f(genotype)
+    possible_combinations = set()
+
+    for G in population:
+        if G.get_value() == (36, 360):
+            possible_combinations.add(G.to_vector())
+
+    if possible_combinations != set():
+        print("Found possible combinations that evaluate to (36, 360):")
+        for v in possible_combinations:
+            print(Genotype.from_vector(v))
+
+    print("Top 10 of population:")
+    population = sorted(population, key=lambda G: G.fitness())
+    for G in population[:10]:
+        print(G)

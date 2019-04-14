@@ -3,8 +3,11 @@
 # @details
 # Excercise 6.1, card problem
 
-from math import log, ceil
+from math import log, ceil, floor
 import random
+from typing import List, Tuple
+from copy import deepcopy
+from enum import IntEnum
 
 ## Product summation
 #
@@ -16,13 +19,20 @@ def prod(lst):
         accumulator *= v
     return accumulator
 
+GenotypeBit = IntEnum("GenotypeBit", "Sum Product")
+
 class Genotype:
-    def __init__(self, sum=None, product=None):
+    @staticmethod
+    def get_shuffled_cards():
+        cards = [v for v in range(1, 11)]
+        random.shuffle(cards)
+        return cards
+
+    def __init__(self, sum: List[int] = None, product: List[int] = None):
         if sum is None or product is None:
             assert sum is product, "If either sum or product is None, then both should be none"
 
-            cards = [v for v in range(1, 11)]
-            random.shuffle(cards)
+            cards = Genotype.get_shuffled_cards()
             random_index = ceil(random.random() * 10)
         else:
             assert len(sum) + len(product) == 10, "The sum of the length of sum and product should be exactly 10"
@@ -33,7 +43,60 @@ class Genotype:
         self.sum = cards[:random_index-1] if sum is None else sum
         self.product = cards[random_index:] if product is None else product
 
-    
+    ## Constructs a Genotype from a bit encoded vector
+    #
+    # @details
+    # Manual constructions is quite verbose, it should be used primarily in
+    # combination with Genotype.to_vector()
+    #
+    # @example
+    # Genotype.from_vector((
+    #     GenotypeBit.Sum,
+    #     GenotypeBit.Product,
+    #     GenotypeBit.Sum,
+    #     GenotypeBit.Product,
+    #     GenotypeBit.Sum,
+    #     GenotypeBit.Product,
+    #     GenotypeBit.Sum,
+    #     GenotypeBit.Product,
+    #     GenotypeBit.Sum,
+    #     GenotypeBit.Product,
+    # ))
+    @classmethod
+    def from_vector(cls, vec):
+        sum = []
+        product = []
+
+        assert len(vec) == 10, "len(vec) should exactly equal 10"
+
+        for i, v in enumerate(vec):
+            assert v in list(map(int, GenotypeBit)), "vec should only contain enum values from GenotypeBit"
+
+
+            if v == 1:
+                sum.append(i + 1)
+            else:
+                product.append(i + 1)
+
+        return cls(sum, product)
+
+    ## Retrieves the genotype as a single tuple, bit encoded
+    #
+    # @details
+    # Encoding goes as following: every bit represents a value in the range
+    # [1, 10], the index of said bit determines the classification (as a term
+    # or as a factor). If bit[0] == GenotypeBit.Sum, 1 belongs to the list
+    # that is summarized. And if bit[1] == GenotypeBit.Product then 2 belongs
+    # to the list that is multiplied. The index of the given bit +1 is the value
+    # it represents.
+    def to_vector(self) -> Tuple[int, ...]:
+        lst = [GenotypeBit.Product] * 10
+
+        for v in self.sum:
+            lst[v - 1] = GenotypeBit.Sum
+
+        return (*lst,)
+
     ## Fitness function
     #
     # @details Fitness is calculated as (LaTeX formula):
@@ -76,7 +139,104 @@ class Genotype:
 
         return sum_fitness + prod_fitness
 
+    def __repr__(self):
+        return "Sum fragment: %s Product fragment: %s" % (str(self.sum), str(self.product))
+
+## A generation holds a pool of genotypes with 
+class Generation:
+    def __init__(self, genotypes: List[Genotype]):
+        pass
+
+class EvolutionaryOperators:
+    ## Modulo, except it has a provided range
+    @staticmethod
+    def scoped_mod(v, min, max):
+        return (v - min) % max
+
+    ## Flips a value on a complementary basis
+    #
+    # @details
+    # Calculates the complementary value within the range [min, max], note that
+    # max is included
+    @staticmethod
+    def complementary_flip(v, min, max):
+        n = max - min
+        half_range = ceil(n / 2)
+        scoped_v = EvolutionaryOperators.scoped_mod(v, min, max)
+        return n - scoped_v + min
+
+    ## Inverts all values, on a complementary basis
+    #
+    # @details
+    # min and max is the range the bits of the genotype belong in. These must
+    # be set accordingly in order to find the n'th complement for each bit. 
+    @staticmethod
+    def flip_genotype(min, max):
+        def f(G):
+            G = G.to_vector()
+            lst = []
+            for v in G:
+                lst.append(EvolutionaryOperators.complementary_flip(v, min, max))
+            return Genotype.from_vector((*lst,))
+
+        return f
+
+    @staticmethod
+    def flip_random_gene(min, max):
+        def f(G):
+            G = G.to_vector()
+            i = floor(random.random() * len(G))
+            # Make new tuple since tuples are immutable
+            return Genotype.from_vector(G[:i] + (EvolutionaryOperators.complementary_flip(G[i], min, max),) + G[i + 1:])
+
+        return f
+    
+    @staticmethod
+    def swap(min, max):
+        def f(G):
+            G = G.to_vector()
+            lhs_i = floor(random.random() * len(G))
+            rhs_i = floor(random.random() * len(G))
+            while lhs_i == rhs_i or lhs_i > rhs_i:
+                if lhs_i == rhs_i:
+                    rhs_i = (rhs_i + 1) % len(G)
+                if lhs_i > rhs_i:
+                    lhs_i, rhs_i = rhs_i, lhs_i
+            # Make new tuple since tuples are immutable
+            return Genotype.from_vector(G[:lhs_i] + (G[rhs_i],) + G[lhs_i + 1:rhs_i] + (G[lhs_i],) + G[rhs_i + 1:])
+
+        return f
+
+def create_offspring(mother: Genotype = None, father: Genotype = None, children: int = 1, **kwargs) -> Generation:
+    assert "operators" in kwargs.keys(), "kwarg operators not defined"
+    operators = kwargs["operators"]
+
+    offspring: List[Genotype] = []
+
+    for op in operators:
+        child = deepcopy(mother)
+        op(offspring, mother, father)
+        offspring.append(child)
+
+    return Generation(offspring)
 
 
 if __name__ == "__main__":
-    print(Genotype([2, 7, 8, 9, 10], [1, 3, 4, 5, 6]).fitness())
+    genotype = Genotype.from_vector((
+        GenotypeBit.Sum,
+        GenotypeBit.Product,
+        GenotypeBit.Sum,
+        GenotypeBit.Product,
+        GenotypeBit.Sum,
+        GenotypeBit.Product,
+        GenotypeBit.Sum,
+        GenotypeBit.Product,
+        GenotypeBit.Sum,
+        GenotypeBit.Product,
+    ))
+
+    f = EvolutionaryOperators.swap(GenotypeBit.Sum, GenotypeBit.Product)
+
+    while True:
+        print(genotype)
+        genotype = f(genotype)

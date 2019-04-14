@@ -238,8 +238,19 @@ def evolve(population, retain=0.2, random_select=0.05, mutate=0.01):
             children.append(partner1.create_child(partner2))
 
     for i, G in enumerate(children):
+        # Possible mutation: swapping cards
         if mutate > random.random():
             swap_mutate = EvolutionaryOperators.swap(GenotypeBit.Sum, GenotypeBit.Product)
+            children[i] = swap_mutate(G)
+
+        # Another possible mutation: flipping a gene
+        if mutate > random.random():
+            swap_mutate = EvolutionaryOperators.flip_random_gene(GenotypeBit.Sum, GenotypeBit.Product)
+            children[i] = swap_mutate(G)
+
+        # Another possible mutation: flipping a genotype
+        if mutate > random.random():
+            swap_mutate = EvolutionaryOperators.flip_genotype(GenotypeBit.Sum, GenotypeBit.Product)
             children[i] = swap_mutate(G)
 
     parents.extend(children)

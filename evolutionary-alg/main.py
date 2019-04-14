@@ -97,6 +97,9 @@ class Genotype:
 
         return (*lst,)
 
+    ## Returns the sum and prod both expanded by their respective functions
+    #
+    # @return (sum(self.sum), prod(self.product))
     def get_value(self):
         return (sum(self.sum), prod(self.product))
 
@@ -142,6 +145,12 @@ class Genotype:
 
         return (sum_fitness + prod_fitness)**2
 
+    ## Creates a new child with the partner
+    #
+    # @details
+    # Uses random crossover to combine a new genotype
+    #
+    # @return New genotype of a child
     def create_child(self, partner):
         _self = self.to_vector()
         partner = partner.to_vector()
@@ -179,6 +188,8 @@ class EvolutionaryOperators:
     # @details
     # min and max is the range the bits of the genotype belong in. These must
     # be set accordingly in order to find the n'th complement for each bit. 
+    #
+    # @return New genotype
     @staticmethod
     def flip_genotype(min, max):
         def f(G):
@@ -190,6 +201,13 @@ class EvolutionaryOperators:
 
         return f
 
+    ## Flips a random gene in the genotype
+    #
+    # @details
+    # min and max is the range the bits of the genotype belong in. These must
+    # be set accordingly in order to find the n'th complement for each bit. 
+    #
+    # @return New genotype
     @staticmethod
     def flip_random_gene(min, max):
         def f(G):
@@ -200,8 +218,11 @@ class EvolutionaryOperators:
 
         return f
     
+    ## Swaps two bits of the given genotype
+    #
+    # @return New genotype
     @staticmethod
-    def swap(min, max):
+    def swap():
         def f(G):
             G = G.to_vector()
             lhs_i = floor(random.random() * len(G))
@@ -216,7 +237,13 @@ class EvolutionaryOperators:
 
         return f
 
-
+## Evolve the provided population
+#
+# @param retain Percentage of the population to retain
+# @param random_select Chance for a genotype to be retained
+# @param mutate Chance for a genotype to have a mutation, for each mutation
+#
+# @return New population, with the new generation appended
 def evolve(population, retain=0.2, random_select=0.05, mutate=0.01):
     graded = [(G.fitness(), G) for G in population]
     graded = [t[1] for t in sorted(graded, key=lambda t: t[0])]
@@ -240,7 +267,7 @@ def evolve(population, retain=0.2, random_select=0.05, mutate=0.01):
     for i, G in enumerate(children):
         # Possible mutation: swapping cards
         if mutate > random.random():
-            swap_mutate = EvolutionaryOperators.swap(GenotypeBit.Sum, GenotypeBit.Product)
+            swap_mutate = EvolutionaryOperators.swap()
             children[i] = swap_mutate(G)
 
         # Another possible mutation: flipping a gene
@@ -256,6 +283,15 @@ def evolve(population, retain=0.2, random_select=0.05, mutate=0.01):
     parents.extend(children)
     return parents
 
+## Grades a population based on the 'top_percentage'
+#
+# @details
+# top_percentage is the fraction that is used to grade a population.
+#
+# @param population List of genotypes
+# @param top_percentage Percentage of population to grade
+#
+# @return Grade, the more towards zero is a better score
 def grade_population(population, top_percentage=0.1):
     fraction = ceil(top_percentage*len(population))
     return sum([G.fitness() for G in population[:fraction]]) / (fraction - 1)

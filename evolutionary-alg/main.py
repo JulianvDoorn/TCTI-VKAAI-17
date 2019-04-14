@@ -3,7 +3,8 @@
 # @details
 # Excercise 6.1, card problem
 
-from math import log
+from math import log, ceil
+import random
 
 ## Product summation
 #
@@ -17,8 +18,21 @@ def prod(lst):
 
 class Genotype:
     def __init__(self, sum=None, product=None):
-        self.sum = [] if sum is None else sum
-        self.product = [] if product is None else product
+        if sum is None or product is None:
+            assert sum is product, "If either sum or product is None, then both should be none"
+
+            cards = [v for v in range(1, 11)]
+            random.shuffle(cards)
+            random_index = ceil(random.random() * 10)
+        else:
+            assert len(sum) + len(product) == 10, "The sum of the length of sum and product should be exactly 10"
+            assert sorted(sum + product) == [v for v in range(1, 11)], "All numbers from the range [1, 10] should be included in sum and product, note that 10 is included"
+        
+        # Everything before random_index is put into self.sum, the remainder is
+        # put in self.product
+        self.sum = cards[:random_index-1] if sum is None else sum
+        self.product = cards[random_index:] if product is None else product
+
     
     ## Fitness function
     #
@@ -55,7 +69,8 @@ class Genotype:
         # the fitness because 1 does not contribute to the fitness for the
         # product component.
         tmp_product = self.product[:]
-        tmp_product.remove(1) 
+        if 1 in self.product:
+            tmp_product.remove(1) 
 
         prod_fitness = abs(sum([log(prod(self.product)/target_prod, v) for v in tmp_product]))
 
